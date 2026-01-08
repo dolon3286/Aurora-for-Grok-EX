@@ -13,7 +13,8 @@ const DEFAULTS = {
   appearance: 'dimmed',
   showInNewChatsOnly: false,
   hideImaginePromo: false,
-  hideLeftNav: false
+  hideLeftNav: false,
+  hideForYouPage: false
 };
 
 const LOCAL_BG_KEY = 'customBgData';
@@ -65,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const cbShowInNewChatsOnly = document.getElementById('showInNewChatsOnly');
   const cbHideImaginePromo = document.getElementById('hideImaginePromo');
   const cbHideLeftNav = document.getElementById('hideLeftNav');
+  const cbHideForYouPage = document.getElementById('hideForYouPage');
 
   const tbBgUrl = document.getElementById('bgUrl');
   const fileBg = document.getElementById('bgFile');
@@ -186,6 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cbShowInNewChatsOnly.checked = !!settings.showInNewChatsOnly;
     cbHideImaginePromo.checked = !!settings.hideImaginePromo;
     cbHideLeftNav.checked = !!settings.hideLeftNav;
+    cbHideForYouPage.checked = !!settings.hideForYouPage;
     blurSlider.value = settings.backgroundBlur;
     blurValue.textContent = settings.backgroundBlur;
 
@@ -227,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
   cbShowInNewChatsOnly.addEventListener('change', () => chrome.storage.sync.set({ showInNewChatsOnly: cbShowInNewChatsOnly.checked }));
   cbHideImaginePromo.addEventListener('change', () => chrome.storage.sync.set({ hideImaginePromo: cbHideImaginePromo.checked }));
   cbHideLeftNav.addEventListener('change', () => chrome.storage.sync.set({ hideLeftNav: cbHideLeftNav.checked }));
+  cbHideForYouPage.addEventListener('change', () => chrome.storage.sync.set({ hideForYouPage: cbHideForYouPage.checked }));
 
   blurSlider.addEventListener('input', () => {
     blurValue.textContent = blurSlider.value;

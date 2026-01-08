@@ -212,7 +212,9 @@ html.grok-focus-mode-on body {
 
 .grok-hide-upgrade-promo,
 
-.grok-hide-imagine-promo {
+.grok-hide-imagine-promo,
+
+.grok-hide-for-you {
 
   display: none !important;
 

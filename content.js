@@ -21,10 +21,12 @@
   const HIDE_USAGE_CLASS = 'grok-hide-usage-notice';
   const HIDE_UPGRADE_CLASS = 'grok-hide-upgrade-promo';
   const HIDE_IMAGINE_CLASS = 'grok-hide-imagine-promo';
+  const HIDE_FOR_YOU_CLASS = 'grok-hide-for-you';
 
   const USAGE_LIMIT_MATCHERS = ['usage limit', 'limit reached', 'try again later', 'come back later', 'quota'];
   const UPGRADE_PROMO_MATCHERS = ['upgrade', 'supergrok', 'subscription', 'plan', 'pro tier'];
   const IMAGINE_PROMO_MATCHERS = ['imagine anything', 'generate images', 'image generation', 'grok imagine'];
+  const FOR_YOU_HIGHLIGHT_SELECTOR = 'a[href^="/highlights/"]';
 
   const USAGE_SELECTORS = ['[role="alert"]', '[aria-live]', 'section', 'aside', 'div[data-testid]', 'div[role="dialog"]'];
   const UPGRADE_SELECTORS = ['[data-testid*="upgrade"]', '[role="dialog"]', 'section', 'aside', 'a', 'button'];
@@ -44,7 +46,8 @@
     appearance: 'dimmed',
     showInNewChatsOnly: false,
     hideImaginePromo: false,
-    hideLeftNav: false
+    hideLeftNav: false,
+    hideForYouPage: false
   };
 
   const QUICK_SETTINGS_CONFIG = [
@@ -251,6 +254,33 @@
     applyHideClass(IMAGINE_PROMO_MATCHERS, IMAGINE_SELECTORS, HIDE_IMAGINE_CLASS, !!settings.hideImaginePromo);
   }
 
+  function findForYouContainers() {
+    const containers = new Set();
+    document.querySelectorAll('h1, h2, h3').forEach((heading) => {
+      const text = (heading.textContent || '').trim().toLowerCase();
+      if (text !== 'for you') return;
+      let node = heading.closest('div');
+      while (node && node !== document.body) {
+        if (node.querySelector(FOR_YOU_HIGHLIGHT_SELECTOR)) {
+          containers.add(node);
+          break;
+        }
+        node = node.parentElement;
+      }
+    });
+    return Array.from(containers);
+  }
+
+  function manageForYouSection() {
+    document.querySelectorAll(`.${HIDE_FOR_YOU_CLASS}`).forEach((node) => {
+      if (!settings.hideForYouPage) {
+        node.classList.remove(HIDE_FOR_YOU_CLASS);
+      }
+    });
+    if (!settings.hideForYouPage) return;
+    findForYouContainers().forEach((node) => node.classList.add(HIDE_FOR_YOU_CLASS));
+  }
+
   function renderQuickSettingsState() {
     const panel = document.getElementById(QS_PANEL_ID);
     if (!panel) return;
@@ -454,6 +484,7 @@
     manageUsageLimitNotices();
     manageUpgradePromos();
     manageImaginePromo();
+    manageForYouSection();
   }
 
   function startObservers() {
@@ -511,6 +542,7 @@
       manageUsageLimitNotices();
       manageUpgradePromos();
       manageImaginePromo();
+      manageForYouSection();
     });
     domObserver.observe(document.body, { childList: true, subtree: true });
 

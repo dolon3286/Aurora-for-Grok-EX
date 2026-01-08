@@ -56,6 +56,12 @@
     "tooltipDisableAnimations":  {
                                      "message":  "Remove Aurora\u0027s extra motion effects"
                                  },
+    "labelHideForYouPage":  {
+                                "message":  "Hide the For You page"
+                            },
+    "tooltipHideForYouPage":  {
+                                  "message":  "Hide Grok\u0027s For You highlights list"
+                              },
     "sectionInterface":  {
                              "message":  "Interface"
                          },

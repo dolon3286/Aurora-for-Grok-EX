@@ -56,6 +56,12 @@
     "tooltipDisableAnimations":  {
                                      "message":  "Quita los efectos extra de Aurora"
                                  },
+    "labelHideForYouPage":  {
+                                "message":  "Ocultar la pagina Para ti"
+                            },
+    "tooltipHideForYouPage":  {
+                                  "message":  "Oculta la lista de destacados de Para ti"
+                              },
     "sectionInterface":  {
                              "message":  "Interfaz"
                          },

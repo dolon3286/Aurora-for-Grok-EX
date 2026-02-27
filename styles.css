@@ -225,14 +225,23 @@ html.grok-focus-mode-on body {
 
 .grok-force-reveal-moderated img,
 .grok-force-reveal-moderated video,
-.grok-force-reveal-moderated canvas {
+.grok-force-reveal-moderated canvas,
+.grok-force-reveal-moderated source {
   filter: none !important;
   -webkit-filter: none !important;
   opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.grok-force-reveal-moderated video {
+  display: block !important;
+  pointer-events: auto !important;
 }
 
 .grok-hide-moderated-overlay {
   display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* Quick Settings */

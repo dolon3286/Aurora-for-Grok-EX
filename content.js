@@ -36,6 +36,8 @@
   const UPGRADE_SELECTORS = ['[data-testid*="upgrade"]', '[role="dialog"]', 'section', 'aside', 'a', 'button'];
   const IMAGINE_SELECTORS = ['section', 'article', 'div[data-testid]', 'a'];
 
+  const MEDIA_FALLBACK_ATTRIBUTES = ['data-src', 'data-srcset', 'data-original', 'data-url', 'data-image', 'data-thumb', 'data-poster'];
+
   const DEFAULTS = {
     legacyComposer: false,
     theme: 'auto',
@@ -250,6 +252,93 @@
     return hasMinimalText && hasIcon && isOverlay;
   }
 
+
+  function setMediaAttributeFromFallback(node, targetAttr) {
+    if (!node) return false;
+    if (node.getAttribute(targetAttr)) return false;
+
+    for (const attr of MEDIA_FALLBACK_ATTRIBUTES) {
+      const value = node.getAttribute(attr);
+      if (!value) continue;
+      if (targetAttr === 'srcset' && !/\s/.test(value) && !value.includes(',')) {
+        node.setAttribute(targetAttr, `${value} 1x`);
+      } else {
+        node.setAttribute(targetAttr, value);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function recoverMediaSources(card) {
+    if (!card) return;
+
+    card.querySelectorAll('img').forEach((img) => {
+      setMediaAttributeFromFallback(img, 'src');
+      setMediaAttributeFromFallback(img, 'srcset');
+      img.removeAttribute('loading');
+      img.removeAttribute('decoding');
+    });
+
+    card.querySelectorAll('video').forEach((video) => {
+      setMediaAttributeFromFallback(video, 'src');
+      setMediaAttributeFromFallback(video, 'poster');
+
+      video.querySelectorAll('source').forEach((source) => {
+        setMediaAttributeFromFallback(source, 'src');
+        setMediaAttributeFromFallback(source, 'srcset');
+      });
+
+      video.autoplay = true;
+      video.controls = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.muted = true;
+      video.removeAttribute('aria-hidden');
+      video.load();
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {});
+      }
+    });
+  }
+
+  function findOverlayCandidates(card) {
+    if (!card) return [];
+    const media = card.querySelector('img, video, canvas');
+    if (!media) return [];
+
+    const mediaRect = media.getBoundingClientRect();
+    const mediaArea = mediaRect.width * mediaRect.height;
+    if (!mediaArea) return [];
+
+    return Array.from(card.querySelectorAll('div, span, button, svg')).filter((node) => {
+      if (node === media || media.contains(node)) return false;
+      const style = window.getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+
+      const rect = node.getBoundingClientRect();
+      const area = rect.width * rect.height;
+      const overlapW = Math.max(0, Math.min(rect.right, mediaRect.right) - Math.max(rect.left, mediaRect.left));
+      const overlapH = Math.max(0, Math.min(rect.bottom, mediaRect.bottom) - Math.max(rect.top, mediaRect.top));
+      const overlapArea = overlapW * overlapH;
+      const overlapsMedia = overlapArea > 0;
+
+      const isLikelyOverlay = nodeLooksLikeModerationOverlay(node)
+        || style.position === 'absolute'
+        || style.position === 'fixed'
+        || style.backdropFilter !== 'none'
+        || style.webkitBackdropFilter !== 'none';
+
+      if (!isLikelyOverlay || !overlapsMedia) return false;
+
+      const coverageRatio = overlapArea / mediaArea;
+      const hasWarningText = /moderat|sensitive|warning|hidden|blocked|restricted/i.test(normalizeNodeText(node));
+      const hasOverlayIcon = !!node.querySelector('svg, [data-icon], [class*="icon"], [class*="warning"], [class*="eye"]');
+      return coverageRatio >= 0.15 || hasWarningText || hasOverlayIcon || area <= 4000;
+    });
+  }
+
   function clearModeratedRevealTags() {
     document.querySelectorAll(`.${FORCE_REVEAL_MODERATED_CLASS}`).forEach((node) => node.classList.remove(FORCE_REVEAL_MODERATED_CLASS));
     document.querySelectorAll(`.${HIDE_MODERATED_OVERLAY_CLASS}`).forEach((node) => node.classList.remove(HIDE_MODERATED_OVERLAY_CLASS));
@@ -259,27 +348,30 @@
     clearModeratedRevealTags();
     if (!settings.hideContentModerated) return;
 
-    const moderationSignals = ['moderated', 'content moderated', 'try a different idea', 'sensitive', 'content warning'];
-    const cards = document.querySelectorAll('article, section, figure, div');
+    const moderationSignals = ['moderated', 'content moderated', 'try a different idea', 'sensitive', 'content warning', 'blocked'];
+    const cards = document.querySelectorAll('article, section, figure, div[data-testid], div[role="group"], div');
 
     cards.forEach((card) => {
-      if (!card.querySelector('img, video, canvas')) return;
+      const media = card.querySelector('img, video, canvas');
+      if (!media) return;
+
       const text = normalizeNodeText(card);
       const attrSignal = `${card.className || ''} ${card.getAttribute('data-testid') || ''} ${card.getAttribute('aria-label') || ''}`.toLowerCase();
       const hasModerationSignal = moderationSignals.some((signal) => text.includes(signal) || attrSignal.includes(signal));
 
-      const media = card.querySelector('img, video, canvas');
-      if (!media) return;
       const mediaStyle = window.getComputedStyle(media);
-      const mediaLooksHidden = mediaStyle.filter.includes('blur') || Number.parseFloat(mediaStyle.opacity || '1') < 0.95;
+      const mediaLooksHidden = mediaStyle.filter.includes('blur')
+        || mediaStyle.webkitFilter.includes('blur')
+        || Number.parseFloat(mediaStyle.opacity || '1') < 0.95;
 
-      const overlayCandidate = Array.from(card.querySelectorAll('div, span, button')).find(nodeLooksLikeModerationOverlay);
-
-      if (!hasModerationSignal && !overlayCandidate) return;
-      if (!mediaLooksHidden && !overlayCandidate) return;
+      const overlays = findOverlayCandidates(card);
+      if (!hasModerationSignal && overlays.length === 0) return;
+      if (!mediaLooksHidden && overlays.length === 0) return;
 
       card.classList.add(FORCE_REVEAL_MODERATED_CLASS);
-      if (overlayCandidate) overlayCandidate.classList.add(HIDE_MODERATED_OVERLAY_CLASS);
+      overlays.forEach((overlay) => overlay.classList.add(HIDE_MODERATED_OVERLAY_CLASS));
+
+      recoverMediaSources(card);
     });
   }
 

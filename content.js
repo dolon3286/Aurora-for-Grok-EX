@@ -19,11 +19,15 @@
   const APPEARANCE_DIMMED_CLASS = 'grok-appearance-dimmed';
 
   const HIDE_USAGE_CLASS = 'grok-hide-usage-notice';
+  const HIDE_CONTENT_MODERATED_CLASS = 'grok-hide-content-moderated-notice';
+  const FORCE_REVEAL_MODERATED_CLASS = 'grok-force-reveal-moderated';
+  const HIDE_MODERATED_OVERLAY_CLASS = 'grok-hide-moderated-overlay';
   const HIDE_UPGRADE_CLASS = 'grok-hide-upgrade-promo';
   const HIDE_IMAGINE_CLASS = 'grok-hide-imagine-promo';
   const HIDE_FOR_YOU_CLASS = 'grok-hide-for-you';
 
   const USAGE_LIMIT_MATCHERS = ['usage limit', 'limit reached', 'try again later', 'come back later', 'quota'];
+  const CONTENT_MODERATED_MATCHERS = ['content moderated. try a different idea.', 'content moderated'];
   const UPGRADE_PROMO_MATCHERS = ['upgrade', 'supergrok', 'subscription', 'plan', 'pro tier'];
   const IMAGINE_PROMO_MATCHERS = ['imagine anything', 'generate images', 'image generation', 'grok imagine'];
   const FOR_YOU_HIGHLIGHT_SELECTOR = 'a[href^="/highlights/"]';
@@ -32,10 +36,13 @@
   const UPGRADE_SELECTORS = ['[data-testid*="upgrade"]', '[role="dialog"]', 'section', 'aside', 'a', 'button'];
   const IMAGINE_SELECTORS = ['section', 'article', 'div[data-testid]', 'a'];
 
+  const MEDIA_FALLBACK_ATTRIBUTES = ['data-src', 'data-srcset', 'data-original', 'data-url', 'data-image', 'data-thumb', 'data-poster'];
+
   const DEFAULTS = {
     legacyComposer: false,
     theme: 'auto',
     hideUsageLimit: false,
+    hideContentModerated: false,
     hideUpgradePromos: false,
     disableAnimations: false,
     focusMode: false,
@@ -57,6 +64,7 @@
         { setting: 'focusMode', labelKey: 'quickSettingsLabelFocusMode' },
         { setting: 'hideUpgradePromos', labelKey: 'quickSettingsLabelHideUpgradePromos' },
         { setting: 'hideImaginePromo', labelKey: 'quickSettingsLabelHideImaginePromo' },
+        { setting: 'hideContentModerated', labelKey: 'quickSettingsLabelHideContentModerated' },
         { setting: 'hideUsageLimit', labelKey: 'quickSettingsLabelHideUsageLimit' }
       ]
     }
@@ -230,6 +238,143 @@
     return { matches: results, matchSet: new Set(results) };
   }
 
+  function normalizeNodeText(node) {
+    return (node?.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function nodeLooksLikeModerationOverlay(node) {
+    if (!node) return false;
+    const text = normalizeNodeText(node);
+    const hasMinimalText = text.length <= 6 || text === '!';
+    const hasIcon = !!node.querySelector('svg, [data-icon], [class*=\"icon\"]');
+    const style = window.getComputedStyle(node);
+    const isOverlay = style.position === 'absolute' || style.position === 'fixed';
+    return hasMinimalText && hasIcon && isOverlay;
+  }
+
+
+  function setMediaAttributeFromFallback(node, targetAttr) {
+    if (!node) return false;
+    if (node.getAttribute(targetAttr)) return false;
+
+    for (const attr of MEDIA_FALLBACK_ATTRIBUTES) {
+      const value = node.getAttribute(attr);
+      if (!value) continue;
+      if (targetAttr === 'srcset' && !/\s/.test(value) && !value.includes(',')) {
+        node.setAttribute(targetAttr, `${value} 1x`);
+      } else {
+        node.setAttribute(targetAttr, value);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function recoverMediaSources(card) {
+    if (!card) return;
+
+    card.querySelectorAll('img').forEach((img) => {
+      setMediaAttributeFromFallback(img, 'src');
+      setMediaAttributeFromFallback(img, 'srcset');
+      img.removeAttribute('loading');
+      img.removeAttribute('decoding');
+    });
+
+    card.querySelectorAll('video').forEach((video) => {
+      setMediaAttributeFromFallback(video, 'src');
+      setMediaAttributeFromFallback(video, 'poster');
+
+      video.querySelectorAll('source').forEach((source) => {
+        setMediaAttributeFromFallback(source, 'src');
+        setMediaAttributeFromFallback(source, 'srcset');
+      });
+
+      video.autoplay = true;
+      video.controls = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.muted = true;
+      video.removeAttribute('aria-hidden');
+      video.load();
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {});
+      }
+    });
+  }
+
+  function findOverlayCandidates(card) {
+    if (!card) return [];
+    const media = card.querySelector('img, video, canvas');
+    if (!media) return [];
+
+    const mediaRect = media.getBoundingClientRect();
+    const mediaArea = mediaRect.width * mediaRect.height;
+    if (!mediaArea) return [];
+
+    return Array.from(card.querySelectorAll('div, span, button, svg')).filter((node) => {
+      if (node === media || media.contains(node)) return false;
+      const style = window.getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+
+      const rect = node.getBoundingClientRect();
+      const area = rect.width * rect.height;
+      const overlapW = Math.max(0, Math.min(rect.right, mediaRect.right) - Math.max(rect.left, mediaRect.left));
+      const overlapH = Math.max(0, Math.min(rect.bottom, mediaRect.bottom) - Math.max(rect.top, mediaRect.top));
+      const overlapArea = overlapW * overlapH;
+      const overlapsMedia = overlapArea > 0;
+
+      const isLikelyOverlay = nodeLooksLikeModerationOverlay(node)
+        || style.position === 'absolute'
+        || style.position === 'fixed'
+        || style.backdropFilter !== 'none'
+        || style.webkitBackdropFilter !== 'none';
+
+      if (!isLikelyOverlay || !overlapsMedia) return false;
+
+      const coverageRatio = overlapArea / mediaArea;
+      const hasWarningText = /moderat|sensitive|warning|hidden|blocked|restricted/i.test(normalizeNodeText(node));
+      const hasOverlayIcon = !!node.querySelector('svg, [data-icon], [class*="icon"], [class*="warning"], [class*="eye"]');
+      return coverageRatio >= 0.15 || hasWarningText || hasOverlayIcon || area <= 4000;
+    });
+  }
+
+  function clearModeratedRevealTags() {
+    document.querySelectorAll(`.${FORCE_REVEAL_MODERATED_CLASS}`).forEach((node) => node.classList.remove(FORCE_REVEAL_MODERATED_CLASS));
+    document.querySelectorAll(`.${HIDE_MODERATED_OVERLAY_CLASS}`).forEach((node) => node.classList.remove(HIDE_MODERATED_OVERLAY_CLASS));
+  }
+
+  function manageModeratedMediaReveal() {
+    clearModeratedRevealTags();
+    if (!settings.hideContentModerated) return;
+
+    const moderationSignals = ['moderated', 'content moderated', 'try a different idea', 'sensitive', 'content warning', 'blocked'];
+    const cards = document.querySelectorAll('article, section, figure, div[data-testid], div[role="group"], div');
+
+    cards.forEach((card) => {
+      const media = card.querySelector('img, video, canvas');
+      if (!media) return;
+
+      const text = normalizeNodeText(card);
+      const attrSignal = `${card.className || ''} ${card.getAttribute('data-testid') || ''} ${card.getAttribute('aria-label') || ''}`.toLowerCase();
+      const hasModerationSignal = moderationSignals.some((signal) => text.includes(signal) || attrSignal.includes(signal));
+
+      const mediaStyle = window.getComputedStyle(media);
+      const mediaLooksHidden = mediaStyle.filter.includes('blur')
+        || mediaStyle.webkitFilter.includes('blur')
+        || Number.parseFloat(mediaStyle.opacity || '1') < 0.95;
+
+      const overlays = findOverlayCandidates(card);
+      if (!hasModerationSignal && overlays.length === 0) return;
+      if (!mediaLooksHidden && overlays.length === 0) return;
+
+      card.classList.add(FORCE_REVEAL_MODERATED_CLASS);
+      overlays.forEach((overlay) => overlay.classList.add(HIDE_MODERATED_OVERLAY_CLASS));
+
+      recoverMediaSources(card);
+    });
+  }
+
   function applyHideClass(matchers, selectors, className, shouldHide) {
     const { matches, matchSet } = findElementsByText(matchers, selectors);
     document.querySelectorAll(`.${className}`).forEach((node) => {
@@ -244,6 +389,38 @@
 
   function manageUsageLimitNotices() {
     applyHideClass(USAGE_LIMIT_MATCHERS, USAGE_SELECTORS, HIDE_USAGE_CLASS, !!settings.hideUsageLimit);
+  }
+
+  function manageContentModeratedNotices() {
+    const shouldHide = !!settings.hideContentModerated;
+    const candidateSelectors = ['[role="alert"]', '[aria-live]', 'div', 'p', 'span'];
+    const { matches } = findElementsByText(CONTENT_MODERATED_MATCHERS, candidateSelectors);
+
+    const targetNodes = matches.filter((node) => {
+      const text = normalizeNodeText(node);
+      const hasModeratedText = CONTENT_MODERATED_MATCHERS.some((matcher) => text.includes(matcher));
+      if (!hasModeratedText) return false;
+
+      const hasRichContent = !!node.querySelector('img, video, canvas, svg, button, a[href], [data-testid*="image"], [data-testid*="media"]');
+      if (hasRichContent) return false;
+
+      const tagName = (node.tagName || '').toLowerCase();
+      const likelyNoticeNode = tagName === 'p' || tagName === 'span' || node.getAttribute('role') === 'alert' || node.hasAttribute('aria-live');
+      if (likelyNoticeNode) return true;
+
+      return (node.children || []).length <= 2;
+    });
+
+    const targetSet = new Set(targetNodes);
+    document.querySelectorAll(`.${HIDE_CONTENT_MODERATED_CLASS}`).forEach((node) => {
+      if (!shouldHide || !targetSet.has(node)) {
+        node.classList.remove(HIDE_CONTENT_MODERATED_CLASS);
+      }
+    });
+
+    if (shouldHide) {
+      targetNodes.forEach((node) => node.classList.add(HIDE_CONTENT_MODERATED_CLASS));
+    }
   }
 
   function manageUpgradePromos() {
@@ -482,6 +659,8 @@
     applyCustomStyles();
     updateBackgroundImage();
     manageUsageLimitNotices();
+    manageContentModeratedNotices();
+    manageModeratedMediaReveal();
     manageUpgradePromos();
     manageImaginePromo();
     manageForYouSection();
@@ -540,6 +719,8 @@
 
     const domObserver = new MutationObserver(() => {
       manageUsageLimitNotices();
+      manageContentModeratedNotices();
+      manageModeratedMediaReveal();
       manageUpgradePromos();
       manageImaginePromo();
       manageForYouSection();

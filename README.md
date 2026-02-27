@@ -26,7 +26,7 @@ Some features are unfinished and bugs may occur.<br><br>
 - Custom backgrounds - presets, direct URLs, or local images and videos with adjustable blur and scaling
 - Quick settings button - in-page toggle bubble to flip focus mode, hide promos, and more without leaving Grok
 - Focus and layout controls - collapse navigation, limit the effect to new chats, or revert to the legacy composer
-- Promo blockers - hide usage limit notices, SuperGrok upgrade panels, and Imagine promos when you need a calmer UI
+- Promo blockers - hide usage limit notices, content-moderated alerts, SuperGrok upgrade panels, and Imagine promos when you need a calmer UI
 - Private by design - no network calls, analytics, or remote config; preferences live in Chrome's `storage.sync`
 
 ---
@@ -67,6 +67,7 @@ Aurora adds a floating button inside Grok's UI. Tap it to reveal lightweight swi
 - Hide SuperGrok promos - mute upgrade banners and upsell toasts.
 - Hide Imagine promo - remove image-generation marketing panels.
 - Hide usage limit notices - silence quota warnings until you need them again.
+- Hide moderated alerts - dismiss "Content Moderated. Try a different idea." notices for uninterrupted flow.
 
 You can also disable the quick settings bubble entirely from the popup if you prefer a cleaner page.
 

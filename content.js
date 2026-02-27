@@ -19,11 +19,13 @@
   const APPEARANCE_DIMMED_CLASS = 'grok-appearance-dimmed';
 
   const HIDE_USAGE_CLASS = 'grok-hide-usage-notice';
+  const HIDE_CONTENT_MODERATED_CLASS = 'grok-hide-content-moderated-notice';
   const HIDE_UPGRADE_CLASS = 'grok-hide-upgrade-promo';
   const HIDE_IMAGINE_CLASS = 'grok-hide-imagine-promo';
   const HIDE_FOR_YOU_CLASS = 'grok-hide-for-you';
 
   const USAGE_LIMIT_MATCHERS = ['usage limit', 'limit reached', 'try again later', 'come back later', 'quota'];
+  const CONTENT_MODERATED_MATCHERS = ['content moderated. try a different idea.', 'content moderated', 'try a different idea'];
   const UPGRADE_PROMO_MATCHERS = ['upgrade', 'supergrok', 'subscription', 'plan', 'pro tier'];
   const IMAGINE_PROMO_MATCHERS = ['imagine anything', 'generate images', 'image generation', 'grok imagine'];
   const FOR_YOU_HIGHLIGHT_SELECTOR = 'a[href^="/highlights/"]';
@@ -36,6 +38,7 @@
     legacyComposer: false,
     theme: 'auto',
     hideUsageLimit: false,
+    hideContentModerated: false,
     hideUpgradePromos: false,
     disableAnimations: false,
     focusMode: false,
@@ -57,6 +60,7 @@
         { setting: 'focusMode', labelKey: 'quickSettingsLabelFocusMode' },
         { setting: 'hideUpgradePromos', labelKey: 'quickSettingsLabelHideUpgradePromos' },
         { setting: 'hideImaginePromo', labelKey: 'quickSettingsLabelHideImaginePromo' },
+        { setting: 'hideContentModerated', labelKey: 'quickSettingsLabelHideContentModerated' },
         { setting: 'hideUsageLimit', labelKey: 'quickSettingsLabelHideUsageLimit' }
       ]
     }
@@ -244,6 +248,10 @@
 
   function manageUsageLimitNotices() {
     applyHideClass(USAGE_LIMIT_MATCHERS, USAGE_SELECTORS, HIDE_USAGE_CLASS, !!settings.hideUsageLimit);
+  }
+
+  function manageContentModeratedNotices() {
+    applyHideClass(CONTENT_MODERATED_MATCHERS, USAGE_SELECTORS, HIDE_CONTENT_MODERATED_CLASS, !!settings.hideContentModerated);
   }
 
   function manageUpgradePromos() {
@@ -482,6 +490,7 @@
     applyCustomStyles();
     updateBackgroundImage();
     manageUsageLimitNotices();
+    manageContentModeratedNotices();
     manageUpgradePromos();
     manageImaginePromo();
     manageForYouSection();
@@ -540,6 +549,7 @@
 
     const domObserver = new MutationObserver(() => {
       manageUsageLimitNotices();
+      manageContentModeratedNotices();
       manageUpgradePromos();
       manageImaginePromo();
       manageForYouSection();

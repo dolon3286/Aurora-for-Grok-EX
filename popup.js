@@ -3,6 +3,7 @@ const DEFAULTS = {
   legacyComposer: false,
   theme: 'auto',
   hideUsageLimit: false,
+  hideContentModerated: false,
   hideUpgradePromos: false,
   disableAnimations: false,
   focusMode: false,
@@ -59,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- UI elements ---
   const cbLegacy = document.getElementById('legacyComposer');
   const cbHideUsageLimit = document.getElementById('hideUsageLimit');
+  const cbHideContentModerated = document.getElementById('hideContentModerated');
   const cbHideUpgradePromos = document.getElementById('hideUpgradePromos');
   const cbDisableAnimations = document.getElementById('disableAnimations');
   const cbFocusMode = document.getElementById('focusMode');
@@ -181,6 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateUi(settings) {
     cbLegacy.checked = !!settings.legacyComposer;
     cbHideUsageLimit.checked = !!settings.hideUsageLimit;
+    cbHideContentModerated.checked = !!settings.hideContentModerated;
     cbHideUpgradePromos.checked = !!settings.hideUpgradePromos;
     cbDisableAnimations.checked = !!settings.disableAnimations;
     cbFocusMode.checked = !!settings.focusMode;
@@ -223,6 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   cbLegacy.addEventListener('change', () => chrome.storage.sync.set({ legacyComposer: cbLegacy.checked }));
   cbHideUsageLimit.addEventListener('change', () => chrome.storage.sync.set({ hideUsageLimit: cbHideUsageLimit.checked }));
+  cbHideContentModerated.addEventListener('change', () => chrome.storage.sync.set({ hideContentModerated: cbHideContentModerated.checked }));
   cbHideUpgradePromos.addEventListener('change', () => chrome.storage.sync.set({ hideUpgradePromos: cbHideUpgradePromos.checked }));
   cbDisableAnimations.addEventListener('change', () => chrome.storage.sync.set({ disableAnimations: cbDisableAnimations.checked }));
   cbFocusMode.addEventListener('change', () => chrome.storage.sync.set({ focusMode: cbFocusMode.checked }));
@@ -288,7 +292,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
-
 
 
 

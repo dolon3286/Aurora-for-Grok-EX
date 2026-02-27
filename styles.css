@@ -210,6 +210,8 @@ html.grok-focus-mode-on body {
 
 .grok-hide-usage-notice,
 
+.grok-hide-content-moderated-notice,
+
 .grok-hide-upgrade-promo,
 
 .grok-hide-imagine-promo,
@@ -218,6 +220,38 @@ html.grok-focus-mode-on body {
 
   display: none !important;
 
+}
+
+
+.grok-force-reveal-moderated,
+.grok-force-reveal-moderated * {
+  visibility: visible !important;
+}
+
+.grok-force-reveal-moderated img,
+.grok-force-reveal-moderated video,
+.grok-force-reveal-moderated canvas {
+  filter: none !important;
+  -webkit-filter: none !important;
+  backdrop-filter: none !important;
+  opacity: 1 !important;
+}
+
+.grok-force-reveal-moderated video {
+  display: block !important;
+  pointer-events: auto !important;
+}
+
+.grok-force-reveal-moderated img,
+.grok-force-reveal-moderated video {
+  object-fit: contain !important;
+  z-index: 2 !important;
+}
+
+.grok-hide-moderated-overlay {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* Quick Settings */

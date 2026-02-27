@@ -242,6 +242,13 @@ html.grok-focus-mode-on body {
   pointer-events: auto !important;
 }
 
+
+.grok-force-reveal-moderated [style*="background-image"] {
+  filter: none !important;
+  -webkit-filter: none !important;
+  backdrop-filter: none !important;
+  opacity: 1 !important;
+}
 .grok-hide-moderated-overlay {
   display: none !important;
   opacity: 0 !important;

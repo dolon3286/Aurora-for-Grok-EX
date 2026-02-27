@@ -244,14 +244,15 @@
     if (!node) return false;
     const text = normalizeNodeText(node);
     const attrs = `${node.getAttribute('aria-label') || ''} ${node.getAttribute('title') || ''} ${node.className || ''}`.toLowerCase();
-    const hasModerationCue = ['moderated', 'sensitive', 'warning', 'blocked', 'hidden'].some((cue) => text.includes(cue) || attrs.includes(cue));
-    const hasIcon = !!node.querySelector('svg, [data-icon], [class*=\"icon\"]');
+    const hasModerationCue = ['moderated', 'sensitive', 'warning', 'blocked', 'hidden', 'restricted'].some((cue) => text.includes(cue) || attrs.includes(cue));
+    const hasIcon = !!node.querySelector('svg, [data-icon], [class*="icon"]');
     const style = window.getComputedStyle(node);
     const isOverlayPositioned = style.position === 'absolute' || style.position === 'fixed' || style.position === 'sticky';
     const nodeRect = node.getBoundingClientRect();
     const isLargeOverlay = !!cardRect && nodeRect.width >= cardRect.width * 0.45 && nodeRect.height >= cardRect.height * 0.45;
-    const hasLowTextDensity = text.length <= 32;
-    return isOverlayPositioned && hasIcon && hasLowTextDensity && (hasModerationCue || isLargeOverlay);
+    const hasLowTextDensity = text.length <= 48;
+    const hasStrongBackdrop = style.backdropFilter.includes('blur') || style.filter.includes('blur') || Number.parseFloat(style.opacity || '1') < 0.98;
+    return isOverlayPositioned && (hasIcon || hasStrongBackdrop) && hasLowTextDensity && (hasModerationCue || isLargeOverlay);
   }
 
   function clearModeratedRevealTags() {
@@ -267,23 +268,106 @@
     node.style.setProperty('opacity', '1', 'important');
     node.style.setProperty('visibility', 'visible', 'important');
     node.style.setProperty('transform', 'none', 'important');
+    node.style.removeProperty('clip-path');
     if (window.getComputedStyle(node).display === 'none') {
       node.style.setProperty('display', 'block', 'important');
     }
   }
 
-  function ensureVideoPlayable(video) {
+  function removeModerationAttributes(node) {
+    if (!node) return;
+    ['hidden', 'inert'].forEach((attr) => {
+      if (node.hasAttribute(attr)) node.removeAttribute(attr);
+    });
+    if (node.getAttribute('aria-hidden') === 'true') {
+      node.removeAttribute('aria-hidden');
+    }
+  }
+
+  function hydrateImageSource(img) {
+    if (!img) return;
+    if (!img.src || img.src.startsWith('blob:')) {
+      const lazySrc = img.getAttribute('data-src') || img.getAttribute('data-original-src') || img.getAttribute('data-full-src');
+      if (lazySrc && img.src !== lazySrc) {
+        img.src = lazySrc;
+      }
+    }
+    const lazySrcset = img.getAttribute('data-srcset') || img.getAttribute('data-full-srcset');
+    if (lazySrcset && !img.srcset) {
+      img.srcset = lazySrcset;
+    }
+    if (img.loading === 'lazy') {
+      img.loading = 'eager';
+    }
+    img.decoding = 'sync';
+  }
+
+  function hydrateVideoSource(video) {
     if (!video) return;
-    video.controls = true;
-    video.autoplay = true;
-    video.playsInline = true;
+    const maybeVideoSrc = video.getAttribute('data-src') || video.getAttribute('data-video-url') || video.getAttribute('data-original-src');
+    if (!video.src && maybeVideoSrc) {
+      video.src = maybeVideoSrc;
+    }
+    video.querySelectorAll('source').forEach((source) => {
+      const lazySrc = source.getAttribute('src') || source.getAttribute('data-src') || source.getAttribute('data-original-src');
+      if (lazySrc && source.src !== lazySrc) {
+        source.src = lazySrc;
+      }
+    });
     if (!video.src && video.querySelector('source')) {
       video.load();
     }
+  }
+
+  function ensureVideoPlayable(video) {
+    if (!video) return;
+    hydrateVideoSource(video);
+    video.controls = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.loop = true;
     const tryPlay = () => video.play().catch(() => {});
     if (video.paused) {
       video.muted = true;
       tryPlay();
+      setTimeout(() => {
+        tryPlay();
+      }, 250);
+    }
+  }
+
+  function getMediaCandidates(card) {
+    const directMedia = Array.from(card.querySelectorAll('img, video, canvas'));
+    const backgroundMedia = Array.from(card.querySelectorAll('div, span, figure')).filter((node) => {
+      const style = window.getComputedStyle(node);
+      const hasBackgroundImage = style.backgroundImage && style.backgroundImage !== 'none';
+      if (!hasBackgroundImage) return false;
+      const rect = node.getBoundingClientRect();
+      return rect.width > 120 && rect.height > 120;
+    });
+    return { directMedia, backgroundMedia };
+  }
+
+  function promoteMediaVisibility(mediaNode, card) {
+    if (!mediaNode) return;
+    unhideElementInline(mediaNode);
+    removeModerationAttributes(mediaNode);
+
+    let parent = mediaNode.parentElement;
+    let depth = 0;
+    while (parent && parent !== card && depth < 7) {
+      unhideElementInline(parent);
+      removeModerationAttributes(parent);
+      parent = parent.parentElement;
+      depth += 1;
+    }
+
+    if (mediaNode.tagName && mediaNode.tagName.toLowerCase() === 'img') {
+      hydrateImageSource(mediaNode);
+    }
+
+    if (mediaNode.tagName && mediaNode.tagName.toLowerCase() === 'video') {
+      ensureVideoPlayable(mediaNode);
     }
   }
 
@@ -291,44 +375,34 @@
     clearModeratedRevealTags();
     if (!settings.hideContentModerated) return;
 
-    const moderationSignals = ['moderated', 'content moderated', 'try a different idea', 'sensitive', 'content warning', 'blocked'];
+    const moderationSignals = ['moderated', 'content moderated', 'try a different idea', 'sensitive', 'content warning', 'blocked', 'restricted'];
     const cards = document.querySelectorAll('article, section, figure, div[data-testid], div[role="group"], div[role="figure"]');
 
     cards.forEach((card) => {
-      const mediaNodes = Array.from(card.querySelectorAll('img, video, canvas'));
-      if (!mediaNodes.length) return;
+      const { directMedia, backgroundMedia } = getMediaCandidates(card);
+      if (!directMedia.length && !backgroundMedia.length) return;
 
       const text = normalizeNodeText(card);
       const attrSignal = `${card.className || ''} ${card.getAttribute('data-testid') || ''} ${card.getAttribute('aria-label') || ''}`.toLowerCase();
       const hasModerationSignal = moderationSignals.some((signal) => text.includes(signal) || attrSignal.includes(signal));
       const cardRect = card.getBoundingClientRect();
 
-      const overlayCandidate = Array.from(card.querySelectorAll('div, span, button, aside')).filter((node) => nodeLooksLikeModerationOverlay(node, cardRect));
+      const overlayCandidates = Array.from(card.querySelectorAll('div, span, button, aside')).filter((node) => nodeLooksLikeModerationOverlay(node, cardRect));
 
-      const mediaLooksHidden = mediaNodes.some((media) => {
+      const mediaLooksHidden = directMedia.some((media) => {
         const mediaStyle = window.getComputedStyle(media);
-        return mediaStyle.filter.includes('blur') || mediaStyle.backdropFilter.includes('blur') || Number.parseFloat(mediaStyle.opacity || '1') < 0.95 || mediaStyle.visibility === 'hidden';
+        return mediaStyle.filter.includes('blur') || mediaStyle.backdropFilter.includes('blur') || Number.parseFloat(mediaStyle.opacity || '1') < 0.95 || mediaStyle.visibility === 'hidden' || mediaStyle.display === 'none';
       });
 
-      if (!hasModerationSignal && !overlayCandidate.length && !mediaLooksHidden) return;
+      if (!hasModerationSignal && !overlayCandidates.length && !mediaLooksHidden) return;
 
       card.classList.add(FORCE_REVEAL_MODERATED_CLASS);
+      removeModerationAttributes(card);
 
-      mediaNodes.forEach((media) => {
-        unhideElementInline(media);
-        let parent = media.parentElement;
-        let depth = 0;
-        while (parent && parent !== card && depth < 5) {
-          unhideElementInline(parent);
-          parent = parent.parentElement;
-          depth += 1;
-        }
-        if (media.tagName && media.tagName.toLowerCase() === 'video') {
-          ensureVideoPlayable(media);
-        }
-      });
+      directMedia.forEach((media) => promoteMediaVisibility(media, card));
+      backgroundMedia.forEach((node) => promoteMediaVisibility(node, card));
 
-      overlayCandidate.forEach((node) => node.classList.add(HIDE_MODERATED_OVERLAY_CLASS));
+      overlayCandidates.forEach((node) => node.classList.add(HIDE_MODERATED_OVERLAY_CLASS));
     });
   }
 

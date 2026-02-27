@@ -210,6 +210,8 @@ html.grok-focus-mode-on body {
 
 .grok-hide-usage-notice,
 
+.grok-hide-content-moderated-notice,
+
 .grok-hide-upgrade-promo,
 
 .grok-hide-imagine-promo,
@@ -218,6 +220,19 @@ html.grok-focus-mode-on body {
 
   display: none !important;
 
+}
+
+
+.grok-force-reveal-moderated img,
+.grok-force-reveal-moderated video,
+.grok-force-reveal-moderated canvas {
+  filter: none !important;
+  -webkit-filter: none !important;
+  opacity: 1 !important;
+}
+
+.grok-hide-moderated-overlay {
+  display: none !important;
 }
 
 /* Quick Settings */

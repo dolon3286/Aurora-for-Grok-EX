@@ -19,14 +19,19 @@
   const APPEARANCE_DIMMED_CLASS = 'grok-appearance-dimmed';
 
   const HIDE_USAGE_CLASS = 'grok-hide-usage-notice';
+  const HIDE_CONTENT_MODERATED_CLASS = 'grok-hide-content-moderated-notice';
+  const FORCE_REVEAL_MODERATED_CLASS = 'grok-force-reveal-moderated';
+  const HIDE_MODERATED_OVERLAY_CLASS = 'grok-hide-moderated-overlay';
   const HIDE_UPGRADE_CLASS = 'grok-hide-upgrade-promo';
   const HIDE_IMAGINE_CLASS = 'grok-hide-imagine-promo';
   const HIDE_FOR_YOU_CLASS = 'grok-hide-for-you';
 
   const USAGE_LIMIT_MATCHERS = ['usage limit', 'limit reached', 'try again later', 'come back later', 'quota'];
+  const CONTENT_MODERATED_MATCHERS = ['content moderated. try a different idea.', 'content moderated'];
   const UPGRADE_PROMO_MATCHERS = ['upgrade', 'supergrok', 'subscription', 'plan', 'pro tier'];
   const IMAGINE_PROMO_MATCHERS = ['imagine anything', 'generate images', 'image generation', 'grok imagine'];
   const FOR_YOU_HIGHLIGHT_SELECTOR = 'a[href^="/highlights/"]';
+  const MEDIA_SOURCE_ATTRS = ['src', 'currentSrc', 'poster', 'data-src', 'data-original', 'data-full', 'data-url', 'data-playable-src'];
 
   const USAGE_SELECTORS = ['[role="alert"]', '[aria-live]', 'section', 'aside', 'div[data-testid]', 'div[role="dialog"]'];
   const UPGRADE_SELECTORS = ['[data-testid*="upgrade"]', '[role="dialog"]', 'section', 'aside', 'a', 'button'];
@@ -36,6 +41,7 @@
     legacyComposer: false,
     theme: 'auto',
     hideUsageLimit: false,
+    hideContentModerated: false,
     hideUpgradePromos: false,
     disableAnimations: false,
     focusMode: false,
@@ -57,6 +63,7 @@
         { setting: 'focusMode', labelKey: 'quickSettingsLabelFocusMode' },
         { setting: 'hideUpgradePromos', labelKey: 'quickSettingsLabelHideUpgradePromos' },
         { setting: 'hideImaginePromo', labelKey: 'quickSettingsLabelHideImaginePromo' },
+        { setting: 'hideContentModerated', labelKey: 'quickSettingsLabelHideContentModerated' },
         { setting: 'hideUsageLimit', labelKey: 'quickSettingsLabelHideUsageLimit' }
       ]
     }
@@ -230,6 +237,183 @@
     return { matches: results, matchSet: new Set(results) };
   }
 
+  function normalizeNodeText(node) {
+    return (node?.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function nodeLooksLikeModerationOverlay(node, cardRect) {
+    if (!node) return false;
+    const text = normalizeNodeText(node);
+    const attrs = `${node.getAttribute('aria-label') || ''} ${node.getAttribute('title') || ''} ${node.className || ''}`.toLowerCase();
+    const hasModerationCue = ['moderated', 'sensitive', 'warning', 'blocked', 'hidden'].some((cue) => text.includes(cue) || attrs.includes(cue));
+    const hasIcon = !!node.querySelector('svg, [data-icon], [class*=\"icon\"]');
+    const style = window.getComputedStyle(node);
+    const isOverlayPositioned = style.position === 'absolute' || style.position === 'fixed' || style.position === 'sticky';
+    const nodeRect = node.getBoundingClientRect();
+    const isLargeOverlay = !!cardRect && nodeRect.width >= cardRect.width * 0.45 && nodeRect.height >= cardRect.height * 0.45;
+    const hasLowTextDensity = text.length <= 32;
+    return isOverlayPositioned && hasIcon && hasLowTextDensity && (hasModerationCue || isLargeOverlay);
+  }
+
+  function clearModeratedRevealTags() {
+    document.querySelectorAll(`.${FORCE_REVEAL_MODERATED_CLASS}`).forEach((node) => node.classList.remove(FORCE_REVEAL_MODERATED_CLASS));
+    document.querySelectorAll(`.${HIDE_MODERATED_OVERLAY_CLASS}`).forEach((node) => node.classList.remove(HIDE_MODERATED_OVERLAY_CLASS));
+  }
+
+  function readCandidateUrlFromNode(node) {
+    if (!node || !node.getAttribute) return '';
+    const values = [];
+    MEDIA_SOURCE_ATTRS.forEach((attr) => {
+      const value = node.getAttribute(attr);
+      if (value) values.push(value);
+    });
+
+    const data = node.dataset || {};
+    Object.keys(data).forEach((key) => {
+      const value = data[key];
+      if (typeof value === 'string' && value) values.push(value);
+    });
+
+    const best = values.find((value) => /^(blob:|data:|https?:\/\/|\/)/i.test(value));
+    return best || '';
+  }
+
+  function revealImgSource(img, card) {
+    if (!img) return;
+    const candidate = readCandidateUrlFromNode(img) || readCandidateUrlFromNode(card);
+    if (candidate && (!img.src || img.src.startsWith('data:image/gif'))) {
+      img.src = candidate;
+    }
+    if (!img.srcset) {
+      const srcsetCandidate = img.getAttribute('data-srcset') || img.getAttribute('data-original-srcset');
+      if (srcsetCandidate) img.srcset = srcsetCandidate;
+    }
+    img.loading = 'eager';
+    img.decoding = 'sync';
+  }
+
+  function revealVideoSource(video, card) {
+    if (!video) return;
+    const candidate = readCandidateUrlFromNode(video) || readCandidateUrlFromNode(card);
+    if (candidate && !video.currentSrc && !video.src) {
+      video.src = candidate;
+    }
+
+    const sourceTags = Array.from(video.querySelectorAll('source'));
+    if (!sourceTags.length && candidate) {
+      const source = document.createElement('source');
+      source.src = candidate;
+      video.appendChild(source);
+    }
+
+    sourceTags.forEach((source) => {
+      const sourceCandidate = readCandidateUrlFromNode(source);
+      if (sourceCandidate && !source.src) source.src = sourceCandidate;
+    });
+
+    const posterCandidate = video.getAttribute('data-poster') || readCandidateUrlFromNode(card);
+    if (posterCandidate && !video.poster) {
+      video.poster = posterCandidate;
+    }
+  }
+
+  function unhideElementInline(node) {
+    if (!node || !node.style) return;
+    node.style.setProperty('filter', 'none', 'important');
+    node.style.setProperty('-webkit-filter', 'none', 'important');
+    node.style.setProperty('backdrop-filter', 'none', 'important');
+    node.style.setProperty('opacity', '1', 'important');
+    node.style.setProperty('visibility', 'visible', 'important');
+    node.style.setProperty('transform', 'none', 'important');
+    node.style.setProperty('clip-path', 'none', 'important');
+    node.style.setProperty('mask-image', 'none', 'important');
+    node.style.setProperty('pointer-events', 'auto', 'important');
+    node.style.setProperty('max-height', 'none', 'important');
+    node.style.setProperty('height', 'auto', 'important');
+    node.style.setProperty('z-index', '2', 'important');
+    if (window.getComputedStyle(node).display === 'none') {
+      node.style.setProperty('display', 'block', 'important');
+    }
+  }
+
+  function ensureVideoPlayable(video) {
+    if (!video) return;
+    video.controls = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.loop = false;
+
+    if (!video.src && video.querySelector('source')) {
+      video.load();
+    }
+
+    const tryPlay = () => video.play().catch(() => {});
+    if (video.paused) {
+      video.muted = true;
+      tryPlay();
+      setTimeout(() => {
+        video.muted = false;
+        tryPlay();
+      }, 250);
+    }
+
+    video.addEventListener('canplay', () => {
+      if (video.paused) tryPlay();
+    }, { once: true });
+  }
+
+  function manageModeratedMediaReveal() {
+    clearModeratedRevealTags();
+    if (!settings.hideContentModerated) return;
+
+    const moderationSignals = ['moderated', 'content moderated', 'try a different idea', 'sensitive', 'content warning', 'blocked'];
+    const cards = document.querySelectorAll('article, section, figure, div[data-testid], div[role="group"], div[role="figure"]');
+
+    cards.forEach((card) => {
+      const mediaNodes = Array.from(card.querySelectorAll('img, video, canvas'));
+      if (!mediaNodes.length) return;
+
+      const text = normalizeNodeText(card);
+      const attrSignal = `${card.className || ''} ${card.getAttribute('data-testid') || ''} ${card.getAttribute('aria-label') || ''}`.toLowerCase();
+      const hasModerationSignal = moderationSignals.some((signal) => text.includes(signal) || attrSignal.includes(signal));
+      const cardRect = card.getBoundingClientRect();
+
+      const overlayCandidate = Array.from(card.querySelectorAll('div, span, button, aside')).filter((node) => nodeLooksLikeModerationOverlay(node, cardRect));
+
+      const mediaLooksHidden = mediaNodes.some((media) => {
+        const mediaStyle = window.getComputedStyle(media);
+        return mediaStyle.filter.includes('blur') || mediaStyle.backdropFilter.includes('blur') || Number.parseFloat(mediaStyle.opacity || '1') < 0.95 || mediaStyle.visibility === 'hidden';
+      });
+
+      if (!hasModerationSignal && !overlayCandidate.length && !mediaLooksHidden) return;
+
+      card.classList.add(FORCE_REVEAL_MODERATED_CLASS);
+
+      mediaNodes.forEach((media) => {
+        unhideElementInline(media);
+        if (media.tagName && media.tagName.toLowerCase() === 'img') {
+          revealImgSource(media, card);
+        }
+        if (media.tagName && media.tagName.toLowerCase() === 'video') {
+          revealVideoSource(media, card);
+        }
+        let parent = media.parentElement;
+        let depth = 0;
+        while (parent && parent !== card && depth < 9) {
+          unhideElementInline(parent);
+          parent = parent.parentElement;
+          depth += 1;
+        }
+        if (media.tagName && media.tagName.toLowerCase() === 'video') {
+          ensureVideoPlayable(media);
+        }
+      });
+
+      overlayCandidate.forEach((node) => node.classList.add(HIDE_MODERATED_OVERLAY_CLASS));
+    });
+  }
+
   function applyHideClass(matchers, selectors, className, shouldHide) {
     const { matches, matchSet } = findElementsByText(matchers, selectors);
     document.querySelectorAll(`.${className}`).forEach((node) => {
@@ -244,6 +428,35 @@
 
   function manageUsageLimitNotices() {
     applyHideClass(USAGE_LIMIT_MATCHERS, USAGE_SELECTORS, HIDE_USAGE_CLASS, !!settings.hideUsageLimit);
+  }
+
+  function manageContentModeratedNotices() {
+    const shouldHide = !!settings.hideContentModerated;
+    const candidateSelectors = ['[role="alert"]', '[aria-live]', 'p', 'span'];
+    const { matches } = findElementsByText(CONTENT_MODERATED_MATCHERS, candidateSelectors);
+
+    const targetNodes = matches.filter((node) => {
+      const text = normalizeNodeText(node);
+      const hasModeratedText = CONTENT_MODERATED_MATCHERS.some((matcher) => text.includes(matcher));
+      if (!hasModeratedText) return false;
+
+      const hasRichContent = !!node.querySelector('img, video, canvas, svg, button, a[href], [data-testid*="image"], [data-testid*="media"]');
+      if (hasRichContent) return false;
+
+      const tagName = (node.tagName || '').toLowerCase();
+      return tagName === 'p' || tagName === 'span' || node.getAttribute('role') === 'alert' || node.hasAttribute('aria-live');
+    });
+
+    const targetSet = new Set(targetNodes);
+    document.querySelectorAll(`.${HIDE_CONTENT_MODERATED_CLASS}`).forEach((node) => {
+      if (!shouldHide || !targetSet.has(node)) {
+        node.classList.remove(HIDE_CONTENT_MODERATED_CLASS);
+      }
+    });
+
+    if (shouldHide) {
+      targetNodes.forEach((node) => node.classList.add(HIDE_CONTENT_MODERATED_CLASS));
+    }
   }
 
   function manageUpgradePromos() {
@@ -482,6 +695,8 @@
     applyCustomStyles();
     updateBackgroundImage();
     manageUsageLimitNotices();
+    manageContentModeratedNotices();
+    manageModeratedMediaReveal();
     manageUpgradePromos();
     manageImaginePromo();
     manageForYouSection();
@@ -540,6 +755,8 @@
 
     const domObserver = new MutationObserver(() => {
       manageUsageLimitNotices();
+      manageContentModeratedNotices();
+      manageModeratedMediaReveal();
       manageUpgradePromos();
       manageImaginePromo();
       manageForYouSection();

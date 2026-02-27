@@ -222,6 +222,14 @@ html.grok-focus-mode-on body {
 
 }
 
+html .grok-force-show-content-moderated,
+html .grok-force-show-content-moderated * {
+
+  display: revert !important;
+
+}
+
+
 /* Quick Settings */
 
 #grok-qs-btn {

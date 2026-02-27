@@ -19,11 +19,13 @@
   const APPEARANCE_DIMMED_CLASS = 'grok-appearance-dimmed';
 
   const HIDE_USAGE_CLASS = 'grok-hide-usage-notice';
+  const HIDE_CONTENT_MODERATED_CLASS = 'grok-hide-content-moderated-notice';
   const HIDE_UPGRADE_CLASS = 'grok-hide-upgrade-promo';
   const HIDE_IMAGINE_CLASS = 'grok-hide-imagine-promo';
   const HIDE_FOR_YOU_CLASS = 'grok-hide-for-you';
 
   const USAGE_LIMIT_MATCHERS = ['usage limit', 'limit reached', 'try again later', 'come back later', 'quota'];
+  const CONTENT_MODERATED_MATCHERS = ['content moderated. try a different idea.', 'content moderated'];
   const UPGRADE_PROMO_MATCHERS = ['upgrade', 'supergrok', 'subscription', 'plan', 'pro tier'];
   const IMAGINE_PROMO_MATCHERS = ['imagine anything', 'generate images', 'image generation', 'grok imagine'];
   const FOR_YOU_HIGHLIGHT_SELECTOR = 'a[href^="/highlights/"]';
@@ -36,6 +38,7 @@
     legacyComposer: false,
     theme: 'auto',
     hideUsageLimit: false,
+    hideContentModerated: false,
     hideUpgradePromos: false,
     disableAnimations: false,
     focusMode: false,
@@ -57,6 +60,7 @@
         { setting: 'focusMode', labelKey: 'quickSettingsLabelFocusMode' },
         { setting: 'hideUpgradePromos', labelKey: 'quickSettingsLabelHideUpgradePromos' },
         { setting: 'hideImaginePromo', labelKey: 'quickSettingsLabelHideImaginePromo' },
+        { setting: 'hideContentModerated', labelKey: 'quickSettingsLabelHideContentModerated' },
         { setting: 'hideUsageLimit', labelKey: 'quickSettingsLabelHideUsageLimit' }
       ]
     }
@@ -244,6 +248,38 @@
 
   function manageUsageLimitNotices() {
     applyHideClass(USAGE_LIMIT_MATCHERS, USAGE_SELECTORS, HIDE_USAGE_CLASS, !!settings.hideUsageLimit);
+  }
+
+  function manageContentModeratedNotices() {
+    const shouldHide = !!settings.hideContentModerated;
+    const candidateSelectors = ['[role="alert"]', '[aria-live]', 'div', 'p', 'span'];
+    const { matches } = findElementsByText(CONTENT_MODERATED_MATCHERS, candidateSelectors);
+
+    const targetNodes = matches.filter((node) => {
+      const text = (node.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const hasModeratedText = CONTENT_MODERATED_MATCHERS.some((matcher) => text.includes(matcher));
+      if (!hasModeratedText) return false;
+
+      const hasRichContent = !!node.querySelector('img, video, canvas, svg, button, a[href], [data-testid*="image"], [data-testid*="media"]');
+      if (hasRichContent) return false;
+
+      const tagName = (node.tagName || '').toLowerCase();
+      const likelyNoticeNode = tagName === 'p' || tagName === 'span' || node.getAttribute('role') === 'alert' || node.hasAttribute('aria-live');
+      if (likelyNoticeNode) return true;
+
+      return (node.children || []).length <= 2;
+    });
+
+    const targetSet = new Set(targetNodes);
+    document.querySelectorAll(`.${HIDE_CONTENT_MODERATED_CLASS}`).forEach((node) => {
+      if (!shouldHide || !targetSet.has(node)) {
+        node.classList.remove(HIDE_CONTENT_MODERATED_CLASS);
+      }
+    });
+
+    if (shouldHide) {
+      targetNodes.forEach((node) => node.classList.add(HIDE_CONTENT_MODERATED_CLASS));
+    }
   }
 
   function manageUpgradePromos() {
@@ -482,6 +518,7 @@
     applyCustomStyles();
     updateBackgroundImage();
     manageUsageLimitNotices();
+    manageContentModeratedNotices();
     manageUpgradePromos();
     manageImaginePromo();
     manageForYouSection();
@@ -540,6 +577,7 @@
 
     const domObserver = new MutationObserver(() => {
       manageUsageLimitNotices();
+      manageContentModeratedNotices();
       manageUpgradePromos();
       manageImaginePromo();
       manageForYouSection();

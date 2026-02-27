@@ -20,6 +20,7 @@
 
   const HIDE_USAGE_CLASS = 'grok-hide-usage-notice';
   const HIDE_CONTENT_MODERATED_CLASS = 'grok-hide-content-moderated-notice';
+  const FORCE_SHOW_MODERATED_MEDIA_CLASS = 'grok-force-show-moderated-media';
   const HIDE_UPGRADE_CLASS = 'grok-hide-upgrade-promo';
   const HIDE_IMAGINE_CLASS = 'grok-hide-imagine-promo';
   const HIDE_FOR_YOU_CLASS = 'grok-hide-for-you';
@@ -248,6 +249,50 @@
 
   function manageUsageLimitNotices() {
     applyHideClass(USAGE_LIMIT_MATCHERS, USAGE_SELECTORS, HIDE_USAGE_CLASS, !!settings.hideUsageLimit);
+  }
+
+  function findModeratedMediaContainers() {
+    const containers = new Set();
+    const moderatedHints = ['content moderated', 'try a different idea'];
+    const nodes = document.querySelectorAll('[role="alert"], [aria-live], div, p, span');
+
+    nodes.forEach((node) => {
+      const text = (node.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!text || !moderatedHints.some((hint) => text.includes(hint))) return;
+
+      let current = node;
+      let depth = 0;
+      while (current && current !== document.body && depth < 8) {
+        if (current.querySelector('img, video, canvas, picture')) {
+          containers.add(current);
+          break;
+        }
+        current = current.parentElement;
+        depth += 1;
+      }
+    });
+
+    return Array.from(containers);
+  }
+
+  function manageModeratedMediaReveal() {
+    const shouldReveal = !!settings.hideContentModerated;
+    document.querySelectorAll(`.${FORCE_SHOW_MODERATED_MEDIA_CLASS}`).forEach((node) => {
+      if (!shouldReveal) {
+        node.classList.remove(FORCE_SHOW_MODERATED_MEDIA_CLASS);
+      }
+    });
+    if (!shouldReveal) return;
+
+    findModeratedMediaContainers().forEach((container) => {
+      container.classList.add(FORCE_SHOW_MODERATED_MEDIA_CLASS);
+      container.querySelectorAll('img, video, canvas, picture img').forEach((media) => {
+        media.style.setProperty('filter', 'none', 'important');
+        media.style.setProperty('-webkit-filter', 'none', 'important');
+        media.style.setProperty('backdrop-filter', 'none', 'important');
+        media.style.setProperty('opacity', '1', 'important');
+      });
+    });
   }
 
   function manageContentModeratedNotices() {
@@ -519,6 +564,7 @@
     updateBackgroundImage();
     manageUsageLimitNotices();
     manageContentModeratedNotices();
+    manageModeratedMediaReveal();
     manageUpgradePromos();
     manageImaginePromo();
     manageForYouSection();
@@ -578,6 +624,7 @@
     const domObserver = new MutationObserver(() => {
       manageUsageLimitNotices();
       manageContentModeratedNotices();
+      manageModeratedMediaReveal();
       manageUpgradePromos();
       manageImaginePromo();
       manageForYouSection();

@@ -210,6 +210,8 @@ html.grok-focus-mode-on body {
 
 .grok-hide-usage-notice,
 
+.grok-hide-content-moderated-notice,
+
 .grok-hide-upgrade-promo,
 
 .grok-hide-imagine-promo,
@@ -218,6 +220,30 @@ html.grok-focus-mode-on body {
 
   display: none !important;
 
+}
+
+
+.grok-force-show-moderated-media img,
+.grok-force-show-moderated-media video,
+.grok-force-show-moderated-media canvas {
+  filter: none !important;
+  -webkit-filter: none !important;
+  backdrop-filter: none !important;
+  opacity: 1 !important;
+}
+
+.grok-force-show-moderated-media [style*="blur"],
+.grok-force-show-moderated-media [style*="backdrop-filter"] {
+  filter: none !important;
+  -webkit-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.grok-force-show-moderated-media [aria-label*="moderated" i],
+.grok-force-show-moderated-media [title*="moderated" i],
+.grok-force-show-moderated-media [class*="moderated" i],
+.grok-force-show-moderated-media [class*="censor" i] {
+  display: none !important;
 }
 
 /* Quick Settings */

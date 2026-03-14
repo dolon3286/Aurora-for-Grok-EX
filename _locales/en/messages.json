@@ -98,6 +98,12 @@
     "tooltipHideUsageLimit":  {
                                   "message":  "Suppress daily or rate-limit popups"
                               },
+    "labelHideContentModerated":  {
+                                       "message":  "Hide content moderated alerts"
+                                   },
+    "tooltipHideContentModerated":  {
+                                         "message":  "Hide \"Content Moderated. Try a different idea.\" notices"
+                                     },
     "labelHideUpgradePromos":  {
                                    "message":  "Hide SuperGrok prompts"
                                },
@@ -161,6 +167,9 @@
     "quickSettingsLabelHideImaginePromo":  {
                                                "message":  "Hide Imagine promo"
                                            },
+    "quickSettingsLabelHideContentModerated":  {
+                                                    "message":  "Hide moderated alerts"
+                                                },
     "quickSettingsLabelHideUsageLimit":  {
                                              "message":  "Hide usage limit"
                                          },

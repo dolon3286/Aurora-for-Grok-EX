@@ -19,11 +19,14 @@
   const APPEARANCE_DIMMED_CLASS = 'grok-appearance-dimmed';
 
   const HIDE_USAGE_CLASS = 'grok-hide-usage-notice';
+  const HIDE_CONTENT_MODERATED_CLASS = 'grok-hide-content-moderated-notice';
+  const FORCE_SHOW_CONTENT_MODERATED_CLASS = 'grok-force-show-content-moderated';
   const HIDE_UPGRADE_CLASS = 'grok-hide-upgrade-promo';
   const HIDE_IMAGINE_CLASS = 'grok-hide-imagine-promo';
   const HIDE_FOR_YOU_CLASS = 'grok-hide-for-you';
 
   const USAGE_LIMIT_MATCHERS = ['usage limit', 'limit reached', 'try again later', 'come back later', 'quota'];
+  const CONTENT_MODERATED_MATCHERS = ['content moderated. try a different idea.', 'content moderated', 'try a different idea'];
   const UPGRADE_PROMO_MATCHERS = ['upgrade', 'supergrok', 'subscription', 'plan', 'pro tier'];
   const IMAGINE_PROMO_MATCHERS = ['imagine anything', 'generate images', 'image generation', 'grok imagine'];
   const FOR_YOU_HIGHLIGHT_SELECTOR = 'a[href^="/highlights/"]';
@@ -36,6 +39,7 @@
     legacyComposer: false,
     theme: 'auto',
     hideUsageLimit: false,
+    hideContentModerated: false,
     hideUpgradePromos: false,
     disableAnimations: false,
     focusMode: false,
@@ -57,6 +61,7 @@
         { setting: 'focusMode', labelKey: 'quickSettingsLabelFocusMode' },
         { setting: 'hideUpgradePromos', labelKey: 'quickSettingsLabelHideUpgradePromos' },
         { setting: 'hideImaginePromo', labelKey: 'quickSettingsLabelHideImaginePromo' },
+        { setting: 'hideContentModerated', labelKey: 'quickSettingsLabelHideContentModerated' },
         { setting: 'hideUsageLimit', labelKey: 'quickSettingsLabelHideUsageLimit' }
       ]
     }
@@ -212,22 +217,25 @@
     }
   }
 
-  function findElementsByText(matchers, selectors) {
+  function findElementsByText(matchers, selectors, { maxTextLength = Number.POSITIVE_INFINITY } = {}) {
     const loweredMatchers = matchers.map((m) => m.toLowerCase());
     const seen = new Set();
-    const results = [];
+    const rawMatches = [];
     selectors.forEach((selector) => {
       document.querySelectorAll(selector).forEach((node) => {
         if (seen.has(node)) return;
-        const text = (node.textContent || '').toLowerCase();
+        const text = (node.textContent || '').trim().toLowerCase();
         if (!text) return;
+        if (text.length > maxTextLength) return;
         if (loweredMatchers.some((matcher) => text.includes(matcher))) {
           seen.add(node);
-          results.push(node);
+          rawMatches.push(node);
         }
       });
     });
-    return { matches: results, matchSet: new Set(results) };
+
+    const matches = rawMatches.filter((node) => !rawMatches.some((other) => other !== node && other.contains(node)));
+    return { matches, matchSet: new Set(matches) };
   }
 
   function applyHideClass(matchers, selectors, className, shouldHide) {
@@ -244,6 +252,34 @@
 
   function manageUsageLimitNotices() {
     applyHideClass(USAGE_LIMIT_MATCHERS, USAGE_SELECTORS, HIDE_USAGE_CLASS, !!settings.hideUsageLimit);
+  }
+
+  function manageContentModeratedNotices() {
+    const shouldHide = !!settings.hideContentModerated;
+    const { matches, matchSet } = findElementsByText(CONTENT_MODERATED_MATCHERS, USAGE_SELECTORS, { maxTextLength: 240 });
+
+    document.querySelectorAll(`.${HIDE_CONTENT_MODERATED_CLASS}`).forEach((node) => {
+      if (!shouldHide || !matchSet.has(node)) {
+        node.classList.remove(HIDE_CONTENT_MODERATED_CLASS);
+      }
+    });
+
+    document.querySelectorAll(`.${FORCE_SHOW_CONTENT_MODERATED_CLASS}`).forEach((node) => {
+      const hasMatchingNotice = matches.some((match) => node.contains(match));
+      if (!shouldHide || !hasMatchingNotice) {
+        node.classList.remove(FORCE_SHOW_CONTENT_MODERATED_CLASS);
+      }
+    });
+
+    if (!shouldHide) return;
+
+    matches.forEach((node) => {
+      node.classList.add(HIDE_CONTENT_MODERATED_CLASS);
+      const container = node.closest('article, li, [data-testid*="message"], [data-testid*="response"], section, div');
+      if (container) {
+        container.classList.add(FORCE_SHOW_CONTENT_MODERATED_CLASS);
+      }
+    });
   }
 
   function manageUpgradePromos() {
@@ -482,6 +518,7 @@
     applyCustomStyles();
     updateBackgroundImage();
     manageUsageLimitNotices();
+    manageContentModeratedNotices();
     manageUpgradePromos();
     manageImaginePromo();
     manageForYouSection();
@@ -540,6 +577,7 @@
 
     const domObserver = new MutationObserver(() => {
       manageUsageLimitNotices();
+      manageContentModeratedNotices();
       manageUpgradePromos();
       manageImaginePromo();
       manageForYouSection();

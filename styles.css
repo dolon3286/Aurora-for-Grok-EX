@@ -210,6 +210,8 @@ html.grok-focus-mode-on body {
 
 .grok-hide-usage-notice,
 
+.grok-hide-content-moderated-notice,
+
 .grok-hide-upgrade-promo,
 
 .grok-hide-imagine-promo,
@@ -219,6 +221,14 @@ html.grok-focus-mode-on body {
   display: none !important;
 
 }
+
+html .grok-force-show-content-moderated,
+html .grok-force-show-content-moderated * {
+
+  display: revert !important;
+
+}
+
 
 /* Quick Settings */
 
